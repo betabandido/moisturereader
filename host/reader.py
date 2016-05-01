@@ -1,11 +1,19 @@
 import Adafruit_BluefruitLE
 from Adafruit_BluefruitLE.services import UART
+import atexit
 import os
 import Queue
 import time
 from threading import Thread
 
+# Arduino reads the sensor once every 30 minutes
+TIME_BETWEEN_READINGS = 30 * 60
+
 packet_queue = Queue.Queue()
+
+def notify_execution_end():
+  """Notifies the packet processor about the execution end."""
+  packet_queue.put('Q')
 
 class PacketProcessor(Thread):
   """Class for processing packets being sent from the sensor.
@@ -22,6 +30,7 @@ class PacketProcessor(Thread):
     """
     Thread.__init__(self)
     self.out_fname = out_fname
+    self.setDaemon(True)
 
   def run(self):
     """Thread's run() method."""
@@ -30,6 +39,10 @@ class PacketProcessor(Thread):
         self.run_impl(out_file)
     except Exception, e:
       print 'Error: {}'.format(e)
+    except:
+      print 'Unexpected exception was caught'
+    finally:
+      print 'Packet processor is finishing'
 
   def run_impl(self, out_file):
     """Loop where packets are actually processed.
@@ -82,21 +95,13 @@ class PacketReceiver:
 
   def __call__(self):
     """Method call from the BLE event loop."""
-    try:
-      (device, uart) = self.connect_to_device()
-    except:
-      return
+    (device, uart) = self.connect_to_device()
 
     try:
       while True:
         self.receive_data(uart);
-    except Exception, e:
-      print 'Error: {}'.format(e)
     finally:
       device.disconnect()
-
-    global packet_queue
-    packet_queue.join()
 
   def connect_to_device(self):
     """Connects to the device.
@@ -141,9 +146,8 @@ class PacketReceiver:
     Args:
       uart: The UART instance.
     """
-    received = uart.read(timeout_sec=60)
+    received = uart.read(timeout_sec=(2 * TIME_BETWEEN_READINGS))
     if received is None:
-      packet_queue.put('Q')
       raise Exception('Received no data!')
 
     for c in received:
@@ -160,5 +164,23 @@ out_fname = os.path.join(os.path.expanduser('~'), 'tmp/moisture.csv')
 packet_processor = PacketProcessor(out_fname)
 packet_processor.start()
 
-ble.run_mainloop_with(packet_receiver)
+def cleanup():
+  """Cleans up everything before exiting.
+  
+  An ending notification is sent to the packet processor. Then we wait until
+  all the pending packets are processed.
+  """
+  print 'Cleaning up before exiting'
+  notify_execution_end()
+  packet_queue.join()
+  time.sleep(5)
+
+atexit.register(cleanup)
+
+try:
+  ble.run_mainloop_with(packet_receiver)
+except Exception, e:
+  print 'Error: {}'.format(e)
+except:
+  print 'Unexpected exception was caught'
 
