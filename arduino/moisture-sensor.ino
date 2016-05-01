@@ -10,7 +10,11 @@
 #define MINIMUM_FIRMWARE_VERSION    "0.6.6"
 #define MODE_LED_BEHAVIOUR          "MODE"
 
-#define NUM_SAMPLES 50
+#define TIME_BETWEEN_READINGS 30 * 60 * 1000
+#define WARMUP_TIME 10 * 1000
+#define NUM_SAMPLES 30
+#define DELAY_BETWEEN_SAMPLES 500
+
 const int sensor_pin = A0;
 const int enable_sensor_pin = 7;
 
@@ -21,27 +25,24 @@ Adafruit_BluefruitLE_UART ble(bluefruitSS,
                               BLUEFRUIT_UART_MODE_PIN,
                               BLUEFRUIT_UART_CTS_PIN,
                               BLUEFRUIT_UART_RTS_PIN);
-                      
+
+/** Prints an error and ends the execution. */
 void error(const __FlashStringHelper* err) {
   Serial.println(err);
   while (1);
 }                              
 
+/** Waits until making a connection with the host. */
 void connect_to_host() {
   ble.reset();
-
   ble.echo(false);
-
   Serial.println(F("Requesting Bluefruit info:"));
   ble.info();
-
   ble.verbose(false);
-
+  
   Serial.println(F("Waiting for connection"));
-
   while (!ble.isConnected())
     delay(500);
-
   Serial.println(F("Connected"));
 
   if (ble.isVersionAtLeast(MINIMUM_FIRMWARE_VERSION)) {
@@ -52,6 +53,7 @@ void connect_to_host() {
   }
 }
 
+/** Setup method. */
 void setup() {
   while (!Serial);
   delay(500);
@@ -69,17 +71,21 @@ void setup() {
       error(F("Couldn't factory reset"));
     }
   }
-
-  connect_to_host();
   
   pinMode(enable_sensor_pin, OUTPUT);
 }
 
-int read_sensor(int samples[]) {
-  Serial.println(F("-- Enabling sensor --"));
+/** Reads samples from the sensor.
+ *  
+ *  @param samples The array where to store the samples.
+ */
+void read_sensor(int samples[]) {
+  Serial.println(F("-- Enabling sensor and waiting for warm-up --"));
   digitalWrite(enable_sensor_pin, HIGH);
+  delay(WARMUP_TIME);
+  
   for (int i = 0; i < NUM_SAMPLES; i++) {
-    delay(500);
+    delay(DELAY_BETWEEN_SAMPLES);
     samples[i] = analogRead(sensor_pin);
     Serial.print(F("Sensor value: "));
     Serial.println(samples[i]);
@@ -88,30 +94,35 @@ int read_sensor(int samples[]) {
   digitalWrite(enable_sensor_pin, LOW);
 }
 
+/** Sends a packet containing a sample to the host.
+ *  
+ *  @param sample The sample to send.
+ */
 void send_packet(int sample) {
   Serial.print(F("Sending sample: "));
   Serial.println(sample);
 
   ble.print("AT+BLEUARTTX=");
-  ble.print("B");
+  ble.print("B"); // packet begin
   ble.print(sample);
-  ble.println("E");
+  ble.println("E"); // packet end
   if (!ble.waitForOK())
     Serial.println(F("Failed to send?"));
 }
 
+/** Loop method. */
 void loop() {
+  if (!ble.isConnected()) {
+    Serial.println(F("Disconnected!"));
+    connect_to_host();
+  }
+
   int samples[NUM_SAMPLES];
   read_sensor(samples);
 
   for (int i = 0; i < NUM_SAMPLES; i++)
     send_packet(samples[i]);
 
-  delay(30 * 1000);
-
-  if (!ble.isConnected()) {
-    Serial.println(F("Disconnected!"));
-    connect_to_host();
-  }
+  delay(TIME_BETWEEN_READINGS);
 }
 
