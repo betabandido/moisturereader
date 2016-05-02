@@ -10,8 +10,8 @@
 #define MINIMUM_FIRMWARE_VERSION    "0.6.6"
 #define MODE_LED_BEHAVIOUR          "MODE"
 
-#define TIME_BETWEEN_READINGS 30 * 60 * 1000
-#define WARMUP_TIME 10 * 1000
+#define TIME_BETWEEN_READINGS 30 * 60 * 1000UL
+#define WARMUP_TIME 10 * 1000UL
 #define NUM_SAMPLES 30
 #define DELAY_BETWEEN_SAMPLES 500
 
@@ -30,7 +30,7 @@ Adafruit_BluefruitLE_UART ble(bluefruitSS,
 void error(const __FlashStringHelper* err) {
   Serial.println(err);
   while (1);
-}                              
+}
 
 /** Waits until making a connection with the host. */
 void connect_to_host() {
