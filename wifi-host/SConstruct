@@ -1,10 +1,11 @@
-import os.path
+import os
 
-BOOST_PATH = '/home/pi/soft/boost_1_60_0/install'
+env = Environment(CXXFLAGS='-std=c++14 -O2')
 
-env = Environment(CXXFLAGS='-std=c++14 -O2',
-                  CPPPATH=[os.path.join(BOOST_PATH, 'include')],
-                  LIBPATH=[os.path.join(BOOST_PATH, 'lib')])
+if 'BOOST_PATH' in os.environ:
+  boost_path = os.environ.get('BOOST_PATH')
+  env.Append(CPPPATH=[os.path.join(boost_path, 'include')])
+  env.Append(LIBPATH=[os.path.join(boost_path, 'lib')])
 
 if not env.GetOption('clean'):
   conf = Configure(env)
