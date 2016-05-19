@@ -47,6 +47,9 @@ void setup() {
 
   Serial.println("\nStarting");
 
+  pinMode(ENABLE_SENSOR_PIN, OUTPUT);
+  digitalWrite(ENABLE_SENSOR_PIN, LOW);
+
   EEPROM.begin(pending_messages_queue::storage_size(MAX_PENDING_MESSAGES));
 //  delete_messages();
   pending_messages = new pending_messages_queue(0, MAX_PENDING_MESSAGES);
