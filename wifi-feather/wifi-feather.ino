@@ -4,11 +4,12 @@
 #include <TimeLib.h>
 #include <WiFiUdp.h>
 
-#include "persistent_vector.h"
+#include "persistent_queue.h"
 #include "ssid-info.h"
 #include "util.h"
 
-PrintEx serial = Serial;
+static constexpr char const* SENSOR_ID = "bostonfern1";
+static constexpr unsigned ENABLE_SENSOR_PIN = 14;
 
 static constexpr unsigned CONNECTION_TIMEOUT = 5000;
 static constexpr char const* HOST = "192.168.1.2";
@@ -17,21 +18,28 @@ static constexpr unsigned PORT = 20001;
 static constexpr size_t MAX_PENDING_MESSAGES = 4;
 static constexpr size_t SAMPLES_PER_MESSAGE = 8;
 
+static constexpr unsigned SENSOR_WARMUP_DELAY = 1000;
+static constexpr unsigned DELAY_BETWEEN_SAMPLES = 500;
+
 // Sleep time: 30s (measured in us)
 static constexpr unsigned SLEEP_TIME = 30 * 1000 * 1000;
+
+static constexpr unsigned short local_port = 8888;
 
 struct message {
   time_t time;
   unsigned short samples[SAMPLES_PER_MESSAGE];
 };
 
-typedef persistent_vector<message> pending_messages_queue;
+typedef persistent_queue<message> pending_messages_queue;
+
 static pending_messages_queue* pending_messages;
 
 static WiFiUDP Udp;
-static constexpr unsigned short local_port = 8888;
-
+// TODO make ntp_client a template capable of handling both WiFiUDP and EthernetUDP
 static ntp_client ntp(Udp);
+
+static PrintEx serial = Serial;
 
 void setup() {
   Serial.begin(115200);
@@ -56,20 +64,31 @@ void setup() {
 }
 
 void loop() {
-  message msg;
-  msg.time = now();
-  for (unsigned short i = 0; i < SAMPLES_PER_MESSAGE; i++)
-    msg.samples[i] = i;
-
-  pending_messages->push_back(msg);
-
+  read_sensor();
   send_messages();
 
   Serial.println("Storing data to EEPROM");
   EEPROM.commit();
 
+  Serial.println("Going to sleep");
   ESP.deepSleep(SLEEP_TIME);
   Serial.println(">>> This should not print");
+}
+
+void read_sensor() {
+  digitalWrite(ENABLE_SENSOR_PIN, HIGH);
+  delay(SENSOR_WARMUP_DELAY);
+  
+  message msg;
+  msg.time = now();
+  for (unsigned short i = 0; i < SAMPLES_PER_MESSAGE; i++) {
+    delay(DELAY_BETWEEN_SAMPLES);
+    msg.samples[i] = analogRead(A0);
+  } 
+
+  digitalWrite(ENABLE_SENSOR_PIN, LOW);
+
+  pending_messages->push(msg);
 }
 
 static void connect_wifi() {  
@@ -86,13 +105,6 @@ static void connect_wifi() {
   serial.printf("Address: %s\n", WiFi.localIP().toString().c_str());
 }
 
-static WiFiClient connect_client() {
-  WiFiClient client;
-  if (!client.connect(HOST, PORT))
-    fatal_error("Connection to host failed");
-  return client;
-}
-
 static void delete_messages() {
   auto size = pending_messages_queue::storage_size(MAX_PENDING_MESSAGES);
   for (size_t i = 0; i < size; i++)
@@ -107,28 +119,31 @@ static void send_messages() {
   serial.printf("Attempting to send %d messages\n",
       pending_messages->size());
 
-  // XXX Add pop_front() ???
-  // XXX Implement a circular queue ???
   while (!pending_messages->empty()) {
-    auto last_idx = pending_messages->size() - 1;
-    auto& msg = (*pending_messages)[last_idx];
-    serial.printf("About to send msg %d (idx: %d)\n", msg.time, last_idx);
-    // TODO use error code
-    send_message(msg);
-    pending_messages->pop_back();
-  } 
+    auto& msg = pending_messages->front();
+    if (!send_message(msg))
+      break;
+    pending_messages->pop();
+  }
 }
 
-static void send_message(const message& msg) {
-  // TODO use the same connection for all messages
-  auto client = connect_client();
+static bool send_message(const message& msg) {
+  // XXX use the same connection for all messages ???
+  WiFiClient client;
+  if (!client.connect(HOST, PORT))
+    return false;
+
+  // TODO check result of prints
   client.print("sensor-id: ");
-  serial.printf("msg.time=%d\n", msg.time);
+  client.println(SENSOR_ID);
+  client.print("time: ");
   client.println(msg.time);
 
 //      serial.printf("time: %d\n", msg.time);
 //    for (size_t s = 0; s < SAMPLES_PER_MESSAGE; s++)
 //      serial.printf("sample%d: %d\n", s, msg.samples[s]);
+
+  return true;
 }
 
 static void print_date() {
