@@ -2,13 +2,13 @@
 #include <ntpclient.h>
 #include <PrintEx.h>
 #include <Statistic.h>
+#include <ThingSpeak.h>
 #include <TimeLib.h>
 #include <WiFiUdp.h>
 
 #include "api-key.h"
 #include "persistent_queue.h"
 #include "ssid-info.h"
-#include "ThingSpeak.h"
 #include "util.h"
 
 static constexpr unsigned ENABLE_SENSOR_PIN = 14;
@@ -24,8 +24,6 @@ static constexpr unsigned DELAY_BETWEEN_SAMPLES = 500;
 // Sleep time: 30s (measured in us)
 static constexpr unsigned SLEEP_TIME = 30 * 1000 * 1000;
 
-static constexpr unsigned short local_port = 8888;
-
 struct message {
   time_t time;
   float sample_mean;
@@ -35,11 +33,7 @@ struct message {
 typedef persistent_queue<message> pending_messages_queue;
 
 static pending_messages_queue* pending_messages;
-
-static WiFiUDP Udp;
-// TODO make ntp_client a template capable of handling both WiFiUDP and EthernetUDP
-static ntp_client ntp(Udp);
-
+static ntp_client ntp(std::unique_ptr<UDP>(new WiFiUDP()));
 static PrintEx serial = Serial;
 
 void setup() {
@@ -58,7 +52,6 @@ void setup() {
   connect_wifi();
 
   Serial.println("Syncing with NTP clock");
-  Udp.begin(local_port);
   setSyncProvider([]() { return ntp.get_time(); });
   bool success = wait_for_condition(
     []() { return timeStatus() != timeNotSet; },
