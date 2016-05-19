@@ -54,12 +54,17 @@ private:
   struct message {
     std::string sensor_id;
     ptime::ptime time;
-    unsigned value;
+    std::vector<unsigned> samples;
 
     std::string to_str() const {
-      return boost::str(boost::format("id:%1% time:%2%")
+      std::vector<std::string> samples_str(samples.size());
+      std::transform(begin(samples), end(samples), begin(samples_str),
+          [](unsigned s) { return std::to_string(s); });
+
+      return boost::str(boost::format("id:%1% time:%2% samples:[%3%]")
           % sensor_id
-          % ptime::to_simple_string(time));
+          % ptime::to_simple_string(time)
+          % boost::algorithm::join(samples_str, ","));
     }
   };
 
@@ -79,6 +84,9 @@ private:
     message msg;
     msg.sensor_id = get_sensor_id();
     msg.time = get_time();
+    auto sample_count = get_sample_count();
+    for (unsigned i = 0; i < sample_count; i++)
+      msg.samples.push_back(get_sample());
     return msg;
   }
 
@@ -109,6 +117,26 @@ private:
           boost::format("Error reading time: %1%") % line);
     auto time = boost::lexical_cast<std::time_t>(match[1].str());
     return ptime::from_time_t(time);
+  }
+
+  std::size_t get_sample_count() {
+    auto line = read_line();
+    std::smatch match;
+    if (!std::regex_match(line, match, std::regex("sample-count: (\\d+)"))
+        || match.size() != 2)
+      throw format_exception(
+          boost::format("Error reading sample count: %1%") % line);
+    return boost::lexical_cast<std::size_t>(match[1].str());
+  }
+
+  unsigned get_sample() {
+    auto line = read_line();
+    std::smatch match;
+    if (!std::regex_match(line, match, std::regex("sample: (\\d+)"))
+        || match.size() != 2)
+      throw format_exception(
+          boost::format("Error reading sample: %1%") % line);
+    return boost::lexical_cast<unsigned>(match[1].str());
   }
 
   /** Reads a line from the socket.

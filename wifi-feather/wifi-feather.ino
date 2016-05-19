@@ -45,6 +45,8 @@ void setup() {
   Serial.begin(115200);
   delay(100);
 
+  Serial.println("\nStarting");
+
   EEPROM.begin(pending_messages_queue::storage_size(MAX_PENDING_MESSAGES));
 //  delete_messages();
   pending_messages = new pending_messages_queue(0, MAX_PENDING_MESSAGES);
@@ -138,12 +140,16 @@ static bool send_message(const message& msg) {
   // TODO check result of prints
   client.print("sensor-id: ");
   client.println(SENSOR_ID);
+  
   client.print("time: ");
   client.println(msg.time);
 
-//      serial.printf("time: %d\n", msg.time);
-//    for (size_t s = 0; s < SAMPLES_PER_MESSAGE; s++)
-//      serial.printf("sample%d: %d\n", s, msg.samples[s]);
+  client.print("sample-count: ");
+  client.println(SAMPLES_PER_MESSAGE);
+  for (size_t s = 0; s < SAMPLES_PER_MESSAGE; s++) {
+    client.print("sample: ");
+    client.println(msg.samples[s]);
+  }
 
   return true;
 }
