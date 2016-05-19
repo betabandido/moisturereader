@@ -64,4 +64,8 @@ target/
 .ipynb_checkpoints
 
 # SSID information
-wifi-feather/ssid-info.h
+ssid-info.h
+
+# ThinkSpeak API key
+api-key.h
+
