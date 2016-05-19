@@ -13,6 +13,10 @@ if not env.GetOption('clean'):
       'boost_system', 'boost/asio.hpp', 'cxx'):
     print 'Could not find boost::asio'
     Exit(1)
+  if not conf.CheckLibWithHeader(
+      'boost_date_time', 'boost/date_time.hpp', 'cxx'):
+    print 'Could not find boost::asio'
+    Exit(1)
   env = conf.Finish()
 
 SConscript('src/SConscript', 'env', variant_dir='build', duplicate=0)

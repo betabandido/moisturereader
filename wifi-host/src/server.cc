@@ -6,10 +6,13 @@
 
 #include <boost/algorithm/string.hpp>
 #include <boost/asio.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/format.hpp>
+#include <boost/lexical_cast.hpp>
 
-using boost::asio::ip::tcp;
 namespace asio = boost::asio;
+namespace ptime = boost::posix_time;
+using boost::asio::ip::tcp;
 
 /** Server TCP port. */
 static constexpr unsigned PORT = 20001;
@@ -43,28 +46,40 @@ public:
 
   /** Handles the session. */
   void run() {
-    auto sensor_id = get_sensor_id();
-    std::cout << boost::format("sensor: %1%\n") % sensor_id;
+    auto msg = read_message();
+    std::cout << msg.to_str() << std::endl;
   }
 
 private:
+  struct message {
+    std::string sensor_id;
+    ptime::ptime time;
+    unsigned value;
+
+    std::string to_str() const {
+      return boost::str(boost::format("id:%1% time:%2%")
+          % sensor_id
+          % ptime::to_simple_string(time));
+    }
+  };
+
   /** The TCP socket to communicate with the sensor. */
   tcp::socket socket_;
 
   /** Buffer to receive data from the sensor. */
   asio::streambuf buffer_;
- 
-  /** Reads a line from the socket.
+
+  /** Reads a message.
    *
-   * @return The line read.
-   */ 
-  std::string read_line() {
-    asio::read_until(socket_, buffer_, '\n');
-    std::istream input(&buffer_);
-    std::string line;
-    std::getline(input, line);
-    boost::trim(line);
-    return line;
+   * TODO we need a timeout in case an incomplete message is sent
+   *
+   * @return The message.
+   */
+  message read_message() {
+    message msg;
+    msg.sensor_id = get_sensor_id();
+    msg.time = get_time();
+    return msg;
   }
 
   /** Reads the sensor ID.
@@ -79,6 +94,34 @@ private:
       throw format_exception(
           boost::format("Error reading sensor id: %1%") % line);
     return match[1].str();
+  }
+
+  /** Reads the time of measurement.
+   *
+   * @return The time of measurement.
+   */
+  ptime::ptime get_time() {
+    auto line = read_line();
+    std::smatch match;
+    if (!std::regex_match(line, match, std::regex("time: (\\d+)"))
+        || match.size() != 2)
+      throw format_exception(
+          boost::format("Error reading time: %1%") % line);
+    auto time = boost::lexical_cast<std::time_t>(match[1].str());
+    return ptime::from_time_t(time);
+  }
+
+  /** Reads a line from the socket.
+   *
+   * @return The line read.
+   */ 
+  std::string read_line() {
+    asio::read_until(socket_, buffer_, '\n');
+    std::istream input(&buffer_);
+    std::string line;
+    std::getline(input, line);
+    boost::trim(line);
+    return line;
   }
 };
 
