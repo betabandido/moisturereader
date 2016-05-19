@@ -24,8 +24,8 @@ public:
   }
 
   static constexpr size_type storage_size(size_type capacity) {
-    return sizeof(unsigned)
-        + sizeof(size_type)
+    return sizeof(storage_area::signature)
+        + sizeof(storage_area::size)
         + capacity * sizeof(value_type);
   }
 
