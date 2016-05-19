@@ -121,8 +121,10 @@ static void send_messages() {
 
   while (!pending_messages->empty()) {
     auto& msg = pending_messages->front();
-    if (!send_message(msg))
+    if (!send_message(msg)) {
+      Serial.println("Error sending message");
       break;
+    }
     pending_messages->pop();
   }
 }
