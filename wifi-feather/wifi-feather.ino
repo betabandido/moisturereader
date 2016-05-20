@@ -34,11 +34,7 @@ struct message {
 typedef persistent_queue<message> pending_messages_queue;
 
 static pending_messages_queue* pending_messages;
-
-static WiFiUDP Udp;
-// TODO make ntp_client a template capable of handling both WiFiUDP and EthernetUDP
-static ntp_client ntp(Udp);
-
+static ntp_client ntp(std::unique_ptr<UDP>(new WiFiUDP()));
 static PrintEx serial = Serial;
 
 void setup() {
@@ -57,7 +53,6 @@ void setup() {
   connect_wifi();
 
   Serial.println("Syncing with NTP clock");
-  Udp.begin(local_port);
   setSyncProvider([]() { return ntp.get_time(); });
   bool success = wait_for_condition(
     []() { return timeStatus() != timeNotSet; },
